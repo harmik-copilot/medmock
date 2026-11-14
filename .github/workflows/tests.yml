@@ -1,6 +1,7 @@
 name: Tests
 
 on:
+  push:
   workflow_dispatch:
 
 permissions:
@@ -24,3 +25,27 @@ jobs:
 
       - name: Run black-box API tests
         run: bash scripts/run-api-tests.sh
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install TypeScript test dependencies
+        run: npm install
+        working-directory: tests/playwright-ts
+
+      - name: Run TypeScript Playwright API tests
+        run: npm test
+        working-directory: tests/playwright-ts
+
+      - name: Upload Playwright reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-reports
+          path: |
+            tests/playwright-ts/playwright-report/
+            tests/playwright-ts/reports/junit.xml
+          if-no-files-found: warn
+          retention-days: 14
