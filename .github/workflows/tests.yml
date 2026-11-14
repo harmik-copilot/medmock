@@ -1,0 +1,26 @@
+name: Tests
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Run test suites
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Run unit and integration tests
+        run: dotnet test tests/Med.Tests/Med.Tests.csproj --configuration Release --nologo
+
+      - name: Run black-box API tests
+        run: bash scripts/run-api-tests.sh
