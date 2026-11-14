@@ -2,17 +2,41 @@ name: Tests
 
 on:
   push:
+    branches: [main]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
+    inputs:
+      target_environment:
+        description: Environment to test
+        type: choice
+        options:
+          - both
+          - test
+          - staging
+        default: both
+      test_suite:
+        description: API test implementation
+        type: choice
+        options:
+          - typescript
+          - csharp
+        default: typescript
+      test_scope:
+        description: Run every regression test or only smoke tests
+        type: choice
+        options:
+          - all
+          - smoke
+        default: all
 
 permissions:
   contents: read
 
 jobs:
-  test:
-    name: Run test suites
+  build:
+    name: Build and unit/integration tests
     runs-on: ubuntu-latest
-    outputs:
-      report_ready: ${{ steps.check_report.outputs.ready }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
@@ -22,24 +46,94 @@ jobs:
         with:
           global-json-file: global.json
 
-      - name: Run unit and integration tests
-        run: dotnet test tests/Med.Tests/Med.Tests.csproj --configuration Release --nologo
+      - name: Restore
+        run: dotnet restore MedMock.sln
 
-      - name: Run black-box API tests
-        run: bash scripts/run-api-tests.sh
+      - name: Build
+        run: dotnet build MedMock.sln --no-restore --configuration Release
+
+      - name: Run unit and integration tests
+        run: dotnet test MedMock.sln --no-build --configuration Release --logger trx --results-directory "$RUNNER_TEMP/results"
+
+      - name: Upload unit and integration test results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: unit-integration-test-results
+          path: ${{ runner.temp }}/results/*.trx
+          if-no-files-found: warn
+          retention-days: 14
+
+  test:
+    name: Test environment
+    needs: build
+    if: >-
+      needs.build.result == 'success' &&
+      (github.event_name == 'push' ||
+       (github.event_name == 'workflow_dispatch' &&
+        (inputs.target_environment == 'test' || inputs.target_environment == 'both')))
+    runs-on: ubuntu-latest
+    environment: med-test
+    outputs:
+      report_ready: ${{ steps.check_report.outputs.ready }}
+    env:
+      TARGET_ENV: test
+      MED_API_URL: ${{ vars.MED_API_URL }}
+      MED_QA_PASSWORD: ${{ secrets.MED_QA_PASSWORD }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Verify Test environment settings
+        run: |
+          test -n "$MED_API_URL" || { echo "::error::Set MED_API_URL in the med-test GitHub environment variables."; exit 1; }
+          test -n "$MED_QA_PASSWORD" || { echo "::error::Set MED_QA_PASSWORD in the med-test GitHub environment secrets."; exit 1; }
+
+      - name: Wait for Test API readiness
+        run: curl --fail --silent --show-error --retry 30 --retry-delay 5 --retry-all-errors "${MED_API_URL%/}/health/ready"
+
+      - name: Set up .NET
+        if: inputs.test_suite == 'csharp' || github.event_name == 'push'
+        uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - name: Run C# smoke tests
+        if: inputs.test_suite == 'csharp' || github.event_name == 'push'
+        run: dotnet test tests/Med.ApiTests/Med.ApiTests.csproj --configuration Release --filter "Category=Smoke" --logger "trx;LogFileName=smoke.trx" --results-directory "$RUNNER_TEMP/api-results/smoke"
+
+      - name: Run C# regression tests
+        if: (inputs.test_suite == 'csharp' || github.event_name == 'push') && inputs.test_scope != 'smoke'
+        run: dotnet test tests/Med.ApiTests/Med.ApiTests.csproj --configuration Release --filter "Category=Regression" --logger "trx;LogFileName=regression.trx" --results-directory "$RUNNER_TEMP/api-results/regression"
 
       - name: Set up Node.js
+        if: inputs.test_suite == 'typescript' || github.event_name == 'push'
         uses: actions/setup-node@v7
         with:
           node-version: 22
 
       - name: Install TypeScript test dependencies
+        if: inputs.test_suite == 'typescript' || github.event_name == 'push'
         run: npm install
         working-directory: tests/playwright-ts
 
-      - name: Run TypeScript Playwright API tests
-        run: npm test
+      - name: Run TypeScript smoke tests
+        if: inputs.test_suite == 'typescript' || github.event_name == 'push'
+        run: npx playwright test --grep @smoke
         working-directory: tests/playwright-ts
+        env:
+          TARGET_ENV: test
+          MED_API_URL: ${{ vars.MED_API_URL }}
+          MED_QA_PASSWORD: ${{ secrets.MED_QA_PASSWORD }}
+
+      - name: Run TypeScript regression tests
+        if: (inputs.test_suite == 'typescript' || github.event_name == 'push') && inputs.test_scope != 'smoke'
+        run: npx playwright test --grep @regression
+        working-directory: tests/playwright-ts
+        env:
+          TARGET_ENV: test
+          MED_API_URL: ${{ vars.MED_API_URL }}
+          MED_QA_PASSWORD: ${{ secrets.MED_QA_PASSWORD }}
 
       - name: Check for HTML report
         id: check_report
@@ -51,27 +145,147 @@ jobs:
             echo "ready=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Upload Playwright reports
+      - name: Upload API test results
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: playwright-reports
+          name: test-environment-results
           path: |
-            tests/playwright-ts/playwright-report/
+            ${{ runner.temp }}/api-results/
             tests/playwright-ts/reports/junit.xml
+            tests/playwright-ts/playwright-report/
           if-no-files-found: warn
           retention-days: 14
 
       - name: Upload report for GitHub Pages
-        if: always() && steps.check_report.outputs.ready == 'true' && github.ref == 'refs/heads/main'
+        if: always() && steps.check_report.outputs.ready == 'true' && github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && inputs.target_environment == 'test' && inputs.test_suite == 'typescript'
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: tests/playwright-ts/playwright-report
+
+  staging:
+    name: Staging environment
+    needs: [build, test]
+    if: >-
+      always() &&
+      needs.build.result == 'success' &&
+      (needs.test.result == 'success' || needs.test.result == 'skipped') &&
+      (github.event_name == 'push' ||
+       (github.event_name == 'workflow_dispatch' &&
+        (inputs.target_environment == 'staging' || inputs.target_environment == 'both')))
+    runs-on: ubuntu-latest
+    environment: med-staging
+    outputs:
+      report_ready: ${{ steps.check_report.outputs.ready }}
+    env:
+      TARGET_ENV: staging
+      MED_API_URL: ${{ vars.MED_API_URL }}
+      MED_QA_PASSWORD: ${{ secrets.MED_QA_PASSWORD }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Verify Staging environment settings
+        run: |
+          test -n "$MED_API_URL" || { echo "::error::Set MED_API_URL in the med-staging GitHub environment variables."; exit 1; }
+          test -n "$MED_QA_PASSWORD" || { echo "::error::Set MED_QA_PASSWORD in the med-staging GitHub environment secrets."; exit 1; }
+
+      - name: Wait for Staging API readiness
+        run: curl --fail --silent --show-error --retry 30 --retry-delay 5 --retry-all-errors "${MED_API_URL%/}/health/ready"
+
+      - name: Set up .NET
+        if: inputs.test_suite == 'csharp' || github.event_name == 'push'
+        uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - name: Run C# smoke tests
+        if: inputs.test_suite == 'csharp' || github.event_name == 'push'
+        run: dotnet test tests/Med.ApiTests/Med.ApiTests.csproj --configuration Release --filter "Category=Smoke" --logger "trx;LogFileName=smoke.trx" --results-directory "$RUNNER_TEMP/api-results/smoke"
+
+      - name: Run C# regression tests
+        if: (inputs.test_suite == 'csharp' || github.event_name == 'push') && inputs.test_scope != 'smoke'
+        run: dotnet test tests/Med.ApiTests/Med.ApiTests.csproj --configuration Release --filter "Category=Regression" --logger "trx;LogFileName=regression.trx" --results-directory "$RUNNER_TEMP/api-results/regression"
+
+      - name: Set up Node.js
+        if: inputs.test_suite == 'typescript' || github.event_name == 'push'
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Install TypeScript test dependencies
+        if: inputs.test_suite == 'typescript' || github.event_name == 'push'
+        run: npm install
+        working-directory: tests/playwright-ts
+
+      - name: Run TypeScript smoke tests
+        if: inputs.test_suite == 'typescript' || github.event_name == 'push'
+        run: npx playwright test --grep @smoke
+        working-directory: tests/playwright-ts
+        env:
+          TARGET_ENV: staging
+          MED_API_URL: ${{ vars.MED_API_URL }}
+          MED_QA_PASSWORD: ${{ secrets.MED_QA_PASSWORD }}
+
+      - name: Run TypeScript regression tests
+        if: (inputs.test_suite == 'typescript' || github.event_name == 'push') && inputs.test_scope != 'smoke'
+        run: npx playwright test --grep @regression
+        working-directory: tests/playwright-ts
+        env:
+          TARGET_ENV: staging
+          MED_API_URL: ${{ vars.MED_API_URL }}
+          MED_QA_PASSWORD: ${{ secrets.MED_QA_PASSWORD }}
+
+      - name: Check for HTML report
+        id: check_report
+        if: always()
+        run: |
+          if [ -f tests/playwright-ts/playwright-report/index.html ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Upload API test results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: staging-environment-results
+          path: |
+            ${{ runner.temp }}/api-results/
+            tests/playwright-ts/reports/junit.xml
+            tests/playwright-ts/playwright-report/
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Run Staging load smoke test
+        if: inputs.test_scope != 'smoke' || github.event_name == 'push'
+        run: docker run --rm -i -e BASE_URL -e QA_USER -e QA_PASSWORD grafana/k6 run - < tests/load/k6-studies.js
+        env:
+          BASE_URL: ${{ vars.MED_API_URL }}
+          QA_USER: dr.lee
+          QA_PASSWORD: ${{ secrets.MED_QA_PASSWORD }}
+
+      - name: Upload report for GitHub Pages
+        if: always() && steps.check_report.outputs.ready == 'true' && github.ref == 'refs/heads/main' && (github.event_name == 'push' || inputs.target_environment == 'staging' || inputs.target_environment == 'both') && (inputs.test_suite == 'typescript' || github.event_name == 'push')
         uses: actions/upload-pages-artifact@v5
         with:
           path: tests/playwright-ts/playwright-report
 
   publish-report:
     name: Publish Playwright HTML report
-    needs: test
-    if: always() && needs.test.outputs.report_ready == 'true' && github.ref == 'refs/heads/main'
+    needs: [build, test, staging]
+    if: >-
+      always() &&
+      github.ref == 'refs/heads/main' &&
+      needs.build.result == 'success' &&
+      (github.event_name == 'push' ||
+       (github.event_name == 'workflow_dispatch' && inputs.test_suite == 'typescript')) &&
+      ((needs.staging.result != 'skipped' && needs.staging.outputs.report_ready == 'true') ||
+       (needs.staging.result == 'skipped' &&
+        github.event_name == 'workflow_dispatch' &&
+        inputs.target_environment == 'test' &&
+        needs.test.outputs.report_ready == 'true'))
     runs-on: ubuntu-latest
     concurrency:
       group: github-pages
