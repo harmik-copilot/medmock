@@ -15,8 +15,8 @@ public sealed class AccessPolicy
 {
     public AccessDecision Evaluate(AppUser user, Study study)
     {
-        //if (user.Region != study.Region)
-        //    return Deny("region mismatch (data residency)");
+        if (user.Region != study.Region)
+            return Deny("region mismatch (data residency)");
 
         return user.Role switch
         {
