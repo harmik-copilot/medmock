@@ -95,6 +95,10 @@ TARGET_ENV=test MED_API_URL=http://localhost:5080 MED_QA_PASSWORD=choose-one dot
 **Staging** environment (approval, deploy, smoke, regression, k6 load smoke). The deploy step is a stub; the rest is wired as a real pipeline would be.
 Run the TypeScript suite instead of the C# one with the pipeline parameter `testSuite`.
 
+`.github/workflows/tests.yml` runs the local test suites on pushes and can also be started manually from GitHub Actions.
+On `main`, it publishes the Playwright HTML report to GitHub Pages; enable Pages with **Settings -> Pages -> Build and deployment -> Source: GitHub Actions**.
+The report link appears in the workflow run. It points to the latest report and may be publicly accessible depending on the repository's Pages visibility.
+
 ## Documentation
 
 | File | What |
