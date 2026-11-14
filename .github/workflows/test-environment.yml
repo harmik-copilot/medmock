@@ -1,0 +1,98 @@
+name: Test environment
+
+on:
+  workflow_dispatch:
+    inputs:
+      test_suite:
+        description: API test implementation
+        type: choice
+        options:
+          - typescript
+          - csharp
+        default: typescript
+      test_scope:
+        description: Run every regression test or only smoke tests
+        type: choice
+        options:
+          - all
+          - smoke
+        default: all
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Run tests against Test
+    runs-on: ubuntu-latest
+    environment: med-test
+    env:
+      TARGET_ENV: test
+      MED_API_URL: ${{ vars.MED_API_URL }}
+      MED_QA_PASSWORD: ${{ secrets.MED_QA_PASSWORD }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Verify Test environment settings
+        run: |
+          test -n "$MED_API_URL" || { echo "::error::Set MED_API_URL in the med-test GitHub environment variables."; exit 1; }
+          test -n "$MED_QA_PASSWORD" || { echo "::error::Set MED_QA_PASSWORD in the med-test GitHub environment secrets."; exit 1; }
+
+      - name: Wait for Test API readiness
+        run: curl --fail --silent --show-error --retry 30 --retry-delay 5 --retry-all-errors "${MED_API_URL%/}/health/ready"
+
+      - name: Set up .NET
+        if: inputs.test_suite == 'csharp'
+        uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - name: Run C# smoke tests
+        if: inputs.test_suite == 'csharp'
+        run: dotnet test tests/Med.ApiTests/Med.ApiTests.csproj --configuration Release --filter "Category=Smoke" --logger "trx;LogFileName=smoke.trx" --results-directory "$RUNNER_TEMP/api-results/smoke"
+
+      - name: Run C# regression tests
+        if: inputs.test_suite == 'csharp' && inputs.test_scope == 'all'
+        run: dotnet test tests/Med.ApiTests/Med.ApiTests.csproj --configuration Release --filter "Category=Regression" --logger "trx;LogFileName=regression.trx" --results-directory "$RUNNER_TEMP/api-results/regression"
+
+      - name: Set up Node.js
+        if: inputs.test_suite == 'typescript'
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Install TypeScript test dependencies
+        if: inputs.test_suite == 'typescript'
+        run: npm install
+        working-directory: tests/playwright-ts
+
+      - name: Run TypeScript smoke tests
+        if: inputs.test_suite == 'typescript'
+        run: npx playwright test --grep @smoke
+        working-directory: tests/playwright-ts
+        env:
+          TARGET_ENV: test
+          MED_API_URL: ${{ vars.MED_API_URL }}
+          MED_QA_PASSWORD: ${{ secrets.MED_QA_PASSWORD }}
+
+      - name: Run TypeScript regression tests
+        if: inputs.test_suite == 'typescript' && inputs.test_scope == 'all'
+        run: npx playwright test --grep @regression
+        working-directory: tests/playwright-ts
+        env:
+          TARGET_ENV: test
+          MED_API_URL: ${{ vars.MED_API_URL }}
+          MED_QA_PASSWORD: ${{ secrets.MED_QA_PASSWORD }}
+
+      - name: Upload API test results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-environment-results
+          path: |
+            ${{ runner.temp }}/api-results/
+            tests/playwright-ts/reports/junit.xml
+            tests/playwright-ts/playwright-report/
+          if-no-files-found: warn
+          retention-days: 14

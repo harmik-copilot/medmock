@@ -95,10 +95,10 @@ TARGET_ENV=test MED_API_URL=http://localhost:5080 MED_QA_PASSWORD=choose-one dot
 **Staging** environment (approval, deploy, smoke, regression, k6 load smoke). The deploy step is a stub; the rest is wired as a real pipeline would be.
 Run the TypeScript suite instead of the C# one with the pipeline parameter `testSuite`.
 
-`.github/workflows/tests.yml` runs the build and unit/integration tests on pushes and pull requests to `main`.
-Pushes to `main` also run both API suites in Test, then Staging, followed by the read-only k6 smoke test. From **Actions -> Tests -> Run workflow**, choose Test, Staging or both, the C# or TypeScript suite, and all tests or smoke only (`@smoke` for TypeScript; smoke-only skips k6).
-Configure GitHub Environments named `med-test` and `med-staging`, each with a `MED_API_URL` variable and `MED_QA_PASSWORD` secret. Add required reviewers to `med-staging` if you want an approval gate. The workflow tests existing deployments; its deployment step is not implemented.
-TypeScript runs on `main` publish the Playwright HTML report to GitHub Pages; enable Pages with **Settings -> Pages -> Build and deployment -> Source: GitHub Actions**. The report link appears in the workflow run and points to the latest report; it may be publicly accessible depending on repository settings.
+`.github/workflows/tests.yml` runs the build, unit/integration tests, C# API tests, and TypeScript Playwright API tests against a local API on pushes and pull requests to `main`. It saves the HTML report as an artifact and publishes it to GitHub Pages on `main`.
+The separate `.github/workflows/test-environment.yml` and `.github/workflows/staging-environment.yml` workflows are manually triggered when those deployments are available. Each lets you select the C# or TypeScript suite and all tests or smoke only (`@smoke` for TypeScript); Staging also runs the read-only k6 smoke test for full runs.
+To enable the environment workflows, create GitHub Environments named `med-test` and `med-staging`, each with a `MED_API_URL` variable and `MED_QA_PASSWORD` secret. Add required reviewers to `med-staging` if you want an approval gate. These workflows test existing deployments and do not deploy the API.
+Enable Pages with **Settings -> Pages -> Build and deployment -> Source: GitHub Actions** to open the latest local Playwright report directly; it may be publicly accessible depending on repository settings.
 
 ## Documentation
 

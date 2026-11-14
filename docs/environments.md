@@ -36,12 +36,14 @@ The two passwords must match: the API's `Auth__QaPassword` and the tests' `MED_Q
 
 ## GitHub Actions configuration
 
-The workflow uses GitHub Environments named `med-test` and `med-staging`. Create both under **Settings -> Environments** and configure each with:
+The separate GitHub Actions workflows `test-environment.yml` and `staging-environment.yml` are manually triggered and test existing deployments; they do not deploy the API. When the environments are ready, create GitHub Environments named `med-test` and `med-staging` under **Settings -> Environments**, and configure each with:
 
 - Environment variable `MED_API_URL`: the deployed API base URL.
 - Environment secret `MED_QA_PASSWORD`: the same QA password configured on that API as `Auth__QaPassword`.
 
-Add required reviewers to `med-staging` to require approval before Staging tests run. The workflow tests existing deployments; it does not deploy the API. Pull requests run only the build and unit/integration tests; pushes to `main` run both API suites through Test and Staging, then the read-only k6 smoke test. A manually selected smoke-only run uses `@smoke` for TypeScript (or `Category=Smoke` for C#) and skips k6.
+Add required reviewers to `med-staging` to require approval before Staging tests run. Choose the C# or TypeScript suite and all tests or smoke only when manually starting an environment workflow. TypeScript smoke-only runs select `@smoke` (C# uses `Category=Smoke`); the Staging workflow skips k6 for smoke-only runs.
+
+The separate `tests.yml` workflow runs all suites against a local API on pushes and pull requests to `main`. It publishes the Playwright HTML report to GitHub Pages on `main`; set **Settings -> Pages -> Build and deployment -> Source** to **GitHub Actions** to enable the report site.
 
 ## Running the tests against an environment
 
