@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <ItemGroup>
+    <ProjectReference Include="..\Med.Domain\Med.Domain.csproj" />
+    <ProjectReference Include="..\Med.Storage\Med.Storage.csproj" />
+    <ProjectReference Include="..\Med.Ingest\Med.Ingest.csproj" />
+  </ItemGroup>
+</Project>

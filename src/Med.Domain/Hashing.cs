@@ -1,0 +1,8 @@
+using System.Security.Cryptography;
+
+namespace Med.Domain;
+
+public static class Hashing
+{
+    public static string Sha256Hex(byte[] bytes) => Convert.ToHexString(SHA256.HashData(bytes));
+}

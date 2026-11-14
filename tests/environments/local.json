@@ -1,0 +1,7 @@
+{
+  "name": "local",
+  "description": "A developer or QA machine. The API is started by the test run (TypeScript) or by hand, with seed data.",
+  "baseUrl": "http://localhost:5080",
+  "allowMutations": true,
+  "expectedAspNetEnvironment": "Development"
+}

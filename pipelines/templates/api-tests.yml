@@ -1,0 +1,81 @@
+# Runs the black-box API tests against an already deployed environment: smoke first (fast fail), then regression.
+# MED_API_URL and MED_QA_PASSWORD come from the stage's variable group. Secrets are not exposed to scripts
+# automatically, so MED_QA_PASSWORD is mapped explicitly in every step that needs it.
+parameters:
+  - name: targetEnv
+    type: string
+  - name: testSuite
+    type: string
+    default: csharp
+
+steps:
+  - ${{ if eq(parameters.testSuite, 'csharp') }}:
+      - task: UseDotNet@2
+        displayName: Install the .NET SDK pinned in global.json
+        inputs:
+          packageType: sdk
+          useGlobalJson: true
+
+      - script: >
+          dotnet test tests/Med.ApiTests/Med.ApiTests.csproj -c Release
+          --filter "Category=Smoke"
+          --logger "trx;LogFileName=smoke.trx" --results-directory $(Agent.TempDirectory)/api-results
+        displayName: Smoke tests (C#)
+        env:
+          TARGET_ENV: ${{ parameters.targetEnv }}
+          MED_API_URL: $(MED_API_URL)
+          MED_QA_PASSWORD: $(MED_QA_PASSWORD)
+
+      - script: >
+          dotnet test tests/Med.ApiTests/Med.ApiTests.csproj -c Release
+          --filter "Category=Regression"
+          --logger "trx;LogFileName=regression.trx" --results-directory $(Agent.TempDirectory)/api-results
+        displayName: Regression tests (C#)
+        env:
+          TARGET_ENV: ${{ parameters.targetEnv }}
+          MED_API_URL: $(MED_API_URL)
+          MED_QA_PASSWORD: $(MED_QA_PASSWORD)
+
+      - task: PublishTestResults@2
+        displayName: Publish API test results
+        condition: succeededOrFailed()
+        inputs:
+          testResultsFormat: VSTest
+          testResultsFiles: '**/*.trx'
+          searchFolder: $(Agent.TempDirectory)/api-results
+          testRunTitle: API tests (C#), ${{ parameters.targetEnv }}
+
+  - ${{ if eq(parameters.testSuite, 'typescript') }}:
+      - task: NodeTool@0
+        displayName: Install Node.js
+        inputs:
+          versionSpec: 22.x
+
+      # Once a package-lock.json is committed, switch this to 'npm ci' (faster and exactly reproducible).
+      - script: npm install
+        displayName: Install test dependencies
+        workingDirectory: tests/playwright-ts
+
+      - script: npx playwright test --grep @smoke
+        displayName: Smoke tests (TypeScript)
+        workingDirectory: tests/playwright-ts
+        env:
+          TARGET_ENV: ${{ parameters.targetEnv }}
+          MED_API_URL: $(MED_API_URL)
+          MED_QA_PASSWORD: $(MED_QA_PASSWORD)
+
+      - script: npx playwright test --grep @regression
+        displayName: Regression tests (TypeScript)
+        workingDirectory: tests/playwright-ts
+        env:
+          TARGET_ENV: ${{ parameters.targetEnv }}
+          MED_API_URL: $(MED_API_URL)
+          MED_QA_PASSWORD: $(MED_QA_PASSWORD)
+
+      - task: PublishTestResults@2
+        displayName: Publish API test results
+        condition: succeededOrFailed()
+        inputs:
+          testResultsFormat: JUnit
+          testResultsFiles: tests/playwright-ts/reports/junit.xml
+          testRunTitle: API tests (TypeScript), ${{ parameters.targetEnv }}

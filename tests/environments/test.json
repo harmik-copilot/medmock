@@ -1,0 +1,7 @@
+{
+  "name": "test",
+  "description": "Shared environment that every new build reaches first. Synthetic data, reset freely.",
+  "baseUrl": "https://med-test.example.com",
+  "allowMutations": true,
+  "expectedAspNetEnvironment": "Test"
+}

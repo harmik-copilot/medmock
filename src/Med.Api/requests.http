@@ -1,0 +1,24 @@
+# For the VS Code "REST Client" extension or Visual Studio's HTTP editor.
+# Start the API first:  dotnet run --project src/Med.Api --urls http://localhost:5080
+@base = http://localhost:5080
+
+### 1. Log in as a GP (referrer)
+# @name login
+POST {{base}}/auth/login
+Content-Type: application/json
+
+{ "username": "dr.lee", "password": "test-pass" }
+
+### 2. List the studies this GP may see
+GET {{base}}/studies
+Authorization: Bearer {{login.response.body.token}}
+
+### 3. Open a study (paste an id from step 2)
+GET {{base}}/studies/PASTE-ID-HERE
+Authorization: Bearer {{login.response.body.token}}
+
+### 4. Wrong password -> expect 401
+POST {{base}}/auth/login
+Content-Type: application/json
+
+{ "username": "dr.lee", "password": "wrong" }

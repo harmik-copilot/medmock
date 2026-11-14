@@ -1,0 +1,141 @@
+# MedMock pipeline:  Build  ->  Test environment  ->  Staging environment (with approval)
+#
+# This is a template of how such a pipeline is usually organised. The "deploy" step is a stub because
+# MedMock has no real hosting. Everything around it (stages, environments, secrets, readiness checks,
+# test results, quality gates) is how a real one is wired.
+#
+# One-time setup in Azure DevOps (see docs/environments.md):
+#   * Environments:      med-test, med-staging     (add an Approval check on med-staging)
+#   * Variable groups:   med-test, med-staging     each with MED_API_URL and a SECRET variable MED_QA_PASSWORD
+
+trigger:
+  branches:
+    include:
+      - main
+
+pr:
+  branches:
+    include:
+      - main
+
+parameters:
+  - name: testSuite
+    displayName: API test suite to run after each deployment
+    type: string
+    default: csharp
+    values:
+      - csharp
+      - typescript
+
+variables:
+  buildConfiguration: Release
+
+pool:
+  vmImage: ubuntu-latest
+
+stages:
+  # ------------------------------------------------------------------------------------------
+  - stage: Build
+    displayName: Build and unit/integration tests
+    jobs:
+      - job: BuildAndTest
+        steps:
+          - task: UseDotNet@2
+            displayName: Install the .NET SDK pinned in global.json
+            inputs:
+              packageType: sdk
+              useGlobalJson: true
+
+          - script: dotnet restore MedMock.sln
+            displayName: Restore
+
+          - script: dotnet build MedMock.sln --no-restore -c $(buildConfiguration)
+            displayName: Build
+
+          - script: >
+              dotnet test MedMock.sln --no-build -c $(buildConfiguration)
+              --logger trx --results-directory $(Agent.TempDirectory)/results
+            displayName: Unit, integration and in-process API tests
+
+          - task: PublishTestResults@2
+            displayName: Publish test results
+            condition: succeededOrFailed()
+            inputs:
+              testResultsFormat: VSTest
+              testResultsFiles: '**/*.trx'
+              searchFolder: $(Agent.TempDirectory)/results
+              testRunTitle: Unit and integration
+
+          - script: >
+              dotnet publish src/Med.Api/Med.Api.csproj -c $(buildConfiguration) --no-build
+              -o $(Build.ArtifactStagingDirectory)/api
+            displayName: Publish the API
+
+          - publish: $(Build.ArtifactStagingDirectory)/api
+            artifact: api
+            displayName: Keep the build output (the same bits go to every environment)
+
+  # ------------------------------------------------------------------------------------------
+  - stage: Test
+    displayName: Deploy to Test and verify
+    dependsOn: Build
+    variables:
+      - group: med-test
+    jobs:
+      - deployment: DeployTest
+        displayName: Deploy, smoke tests, regression tests
+        environment: med-test
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - checkout: self
+                - download: current
+                  artifact: api
+                - template: pipelines/templates/deploy-api.yml
+                  parameters:
+                    targetEnv: test
+                - template: pipelines/templates/api-tests.yml
+                  parameters:
+                    targetEnv: test
+                    testSuite: ${{ parameters.testSuite }}
+
+  # ------------------------------------------------------------------------------------------
+  - stage: Staging
+    displayName: Deploy to Staging and verify
+    dependsOn: Test
+    variables:
+      - group: med-staging
+    jobs:
+      # The 'med-staging' environment can require a manual approval before this job starts.
+      - deployment: DeployStaging
+        displayName: Deploy, smoke tests, regression tests
+        environment: med-staging
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - checkout: self
+                - download: current
+                  artifact: api
+                - template: pipelines/templates/deploy-api.yml
+                  parameters:
+                    targetEnv: staging
+                - template: pipelines/templates/api-tests.yml
+                  parameters:
+                    targetEnv: staging
+                    testSuite: ${{ parameters.testSuite }}
+
+      - job: LoadSmoke
+        displayName: Load smoke test (k6, read-only)
+        dependsOn: DeployStaging
+        steps:
+          - checkout: self
+          - script: >
+              docker run --rm -i -e BASE_URL -e QA_USER -e QA_PASSWORD
+              grafana/k6 run - < tests/load/k6-studies.js
+            displayName: k6 against Staging
+            env:
+              BASE_URL: $(MED_API_URL)
+              QA_USER: dr.lee
+              QA_PASSWORD: $(MED_QA_PASSWORD)   # secrets must be mapped explicitly

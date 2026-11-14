@@ -1,0 +1,7 @@
+{
+  "name": "staging",
+  "description": "Production-like, the last stop before release. Synthetic or de-identified data only. No seed data: tests create their own.",
+  "baseUrl": "https://med-staging.example.com",
+  "allowMutations": true,
+  "expectedAspNetEnvironment": "Staging"
+}

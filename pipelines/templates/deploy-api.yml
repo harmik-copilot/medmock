@@ -1,0 +1,20 @@
+# STUB deployment. Replace the first step with the real one (App Service, container app, VM, ...).
+parameters:
+  - name: targetEnv
+    type: string
+
+steps:
+  - script: |
+      echo "Deploying the 'api' artifact to '${{ parameters.targetEnv }}'"
+      echo "STUB: replace this step with the real deployment."
+      echo "The real deployment must set, on the target:"
+      echo "  ASPNETCORE_ENVIRONMENT = Test or Staging (matching the environment file in tests/environments)"
+      echo "  APP_VERSION            = $(Build.BuildNumber)"
+      echo "  Auth__QaPassword       = a SECRET from the variable group or key vault"
+    displayName: Deploy API (stub)
+
+  # A deployment is only "done" when the app says it is ready. Fail the pipeline early if it never does.
+  - script: >
+      curl --fail --silent --show-error --retry 30 --retry-delay 5 --retry-all-errors
+      "$(MED_API_URL)/health/ready"
+    displayName: Wait until the API is ready
