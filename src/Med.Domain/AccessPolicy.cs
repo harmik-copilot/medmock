@@ -20,7 +20,7 @@ public sealed class AccessPolicy
 
         return user.Role switch
         {
-            Role.Referrer => study.ReferrerId != user.Id
+            Role.Referrer => study.ReferrerId == user.Id
                 ? Allow("referrer of record")
                 : Deny("not the referrer of record"),
 
