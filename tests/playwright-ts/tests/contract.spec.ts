@@ -70,7 +70,7 @@ test.describe('Response contract', () => {
     expect(res.headers()['x-correlation-id']).toBe('qa-trace-12345');
   });
 
-  test('an unsafe correlation id is replaced, not echoed', { tag: ['@regression', '@security'] }, async ({ request }) => {
+  test('an unsafe correlation id is replaced, not echoed', { tag: ['@regression', '@security', '@R16'] }, async ({ request }) => {
     const res = await request.get('/health/live', { headers: { 'X-Correlation-ID': 'bad id with spaces & <tags>' } });
     const returned = res.headers()['x-correlation-id'];
     expect(returned).not.toContain('<');

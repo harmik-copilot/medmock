@@ -15,9 +15,12 @@ The same 44 black-box API checks as `tests/Med.ApiTests` (C#), in TypeScript. No
 npx playwright test                       # local: starts the API if needed, runs all 44, stops it
 npx playwright test --grep @smoke         # only smoke tests
 npx playwright test --grep @security      # only security tests
+npx playwright test --grep @R2            # tests tagged for risk R2 in docs/test-plan.md
 npx playwright test permissions.spec.ts   # one file
 npx playwright show-report                # HTML report
 ```
+
+Risk-based tags use the registry IDs directly (`@R1`, `@R2`, etc.) and can be combined with the existing smoke, regression, and security tags.
 
 ## Other environments
 

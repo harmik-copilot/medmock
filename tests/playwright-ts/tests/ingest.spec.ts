@@ -7,7 +7,7 @@ import { environment } from './helpers/env';
 test.describe('Ingest', () => {
   test.skip(!environment.allowMutations, 'Environment is read-only: these tests create data');
 
-  test('pushing studies requires authentication', { tag: ['@regression', '@security'] }, async ({ request }) => {
+  test('pushing studies requires authentication', { tag: ['@regression', '@security', '@R4', '@R6'] }, async ({ request }) => {
     const res = await request.post('/ingest/studies', {
       data: { studies: [newStudyPayload({ referrerId: 'ref-001', patientId: 'P-1001' })] },
     });
@@ -15,7 +15,7 @@ test.describe('Ingest', () => {
   });
 
   for (const username of ['dr.lee', 'sam', 'dr.novak']) {
-    test(`only providers can ingest (${username} gets 403 on both endpoints)`, { tag: ['@regression', '@security'] }, async ({ request }) => {
+    test(`only providers can ingest (${username} gets 403 on both endpoints)`, { tag: ['@regression', '@security', '@R6'] }, async ({ request }) => {
       const token = await login(request, username);
       const push = await request.post('/ingest/studies', {
         headers: auth(token),
@@ -27,7 +27,7 @@ test.describe('Ingest', () => {
     });
   }
 
-  test('a pushed study is accepted, gets an id, and the referrer can open it', { tag: ['@smoke', '@regression'] }, async ({ request }) => {
+  test('a pushed study is accepted, gets an id, and the referrer can open it', { tag: ['@smoke', '@regression', '@R1', '@R6'] }, async ({ request }) => {
     const study = await createStudy(request, { referrerId: 'ref-001', patientId: 'P-1001' });
     const lee = await login(request, 'dr.lee');
 
@@ -36,7 +36,7 @@ test.describe('Ingest', () => {
     expect(res.status()).toBe(200);
   });
 
-  test('pushing the same study twice is reported as a duplicate (idempotent)', { tag: ['@regression'] }, async ({ request }) => {
+  test('pushing the same study twice is reported as a duplicate (idempotent)', { tag: ['@regression', '@R6'] }, async ({ request }) => {
     const payload = newStudyPayload({ referrerId: 'ref-001', patientId: 'P-1001' });
 
     const first = await (await pushStudies(request, 'clinic.admin', [payload])).json();
@@ -48,7 +48,7 @@ test.describe('Ingest', () => {
     expect(second.acceptedStudyIds).toHaveLength(0);
   });
 
-  test('an unsupported modality is rejected with a reason and does not block the rest of the batch', { tag: ['@regression'] }, async ({ request }) => {
+  test('an unsupported modality is rejected with a reason and does not block the rest of the batch', { tag: ['@regression', '@R6'] }, async ({ request }) => {
     const bad = newStudyPayload({ referrerId: 'ref-001', patientId: 'P-1001', modality: 'XX' });
     const good = newStudyPayload({ referrerId: 'ref-001', patientId: 'P-1001' });
 
@@ -61,7 +61,7 @@ test.describe('Ingest', () => {
     expect(summary.rejected[0].reason).toContain('modality');
   });
 
-  test('a study dated in the future is rejected', { tag: ['@regression'] }, async ({ request }) => {
+  test('a study dated in the future is rejected', { tag: ['@regression', '@R6'] }, async ({ request }) => {
     const future = new Date(Date.now() + 3 * 86_400_000).toISOString().slice(0, 10);
     const payload = newStudyPayload({ referrerId: 'ref-001', patientId: 'P-1001', studyDate: future });
 
@@ -71,24 +71,24 @@ test.describe('Ingest', () => {
     expect(summary.rejected[0].reason).toContain('future');
   });
 
-  test('image data that is not valid base64 returns 400', { tag: ['@regression'] }, async ({ request }) => {
+  test('image data that is not valid base64 returns 400', { tag: ['@regression', '@R6'] }, async ({ request }) => {
     const payload = { ...newStudyPayload({ referrerId: 'ref-001', patientId: 'P-1001' }), pixelsBase64: '***not base64***' };
     const res = await pushStudies(request, 'clinic.admin', [payload]);
     expect(res.status()).toBe(400);
   });
 
-  test('an empty batch returns 400', { tag: ['@regression'] }, async ({ request }) => {
+  test('an empty batch returns 400', { tag: ['@regression', '@R6'] }, async ({ request }) => {
     const res = await pushStudies(request, 'clinic.admin', []);
     expect(res.status()).toBe(400);
   });
 
-  test('a batch of more than 100 studies returns 400', { tag: ['@regression'] }, async ({ request }) => {
+  test('a batch of more than 100 studies returns 400', { tag: ['@regression', '@R6'] }, async ({ request }) => {
     const studies = Array.from({ length: 101 }, () => newStudyPayload({ referrerId: 'ref-001', patientId: 'P-1001' }));
     const res = await pushStudies(request, 'clinic.admin', studies);
     expect(res.status()).toBe(400);
   });
 
-  test('pulling from the clinic PACS twice adds nothing the second time', { tag: ['@regression'] }, async ({ request }) => {
+  test('pulling from the clinic PACS twice adds nothing the second time', { tag: ['@regression', '@R6'] }, async ({ request }) => {
     const admin = await login(request, 'clinic.admin');
 
     const first = await request.post('/ingest/run', { headers: auth(admin) });

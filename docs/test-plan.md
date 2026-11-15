@@ -41,22 +41,22 @@ Staging has no seed data. This is what lets the same tests run on a laptop, on a
 
 | ID | Risk | Sev | Covered by | Status |
 |---|---|---|---|---|
-| R1 | A referrer, patient or clinic opens a study that is not theirs | S1 | `AccessPolicyTests`; black-box permission tests (referrer, patient, provider cases) | Automated |
-| R2 | Study served across regions (data residency breach) | S1 | `AccessPolicyTests.Region_mismatch...`; black-box residency tests **including the cross-border referral case** | Automated |
-| R3 | An error response leaks patient data | S1 | black-box: 403 has an empty body and no patient name | Automated |
-| R4 | Unauthenticated or forged-token access | S1 | black-box auth tests, 401 on every protected endpoint | Automated |
+| R1 | A referrer, patient or clinic opens a study that is not theirs | S1 | `AccessPolicyTests`; black-box permission and ingest tests tagged `@R1` | Automated |
+| R2 | Study served across regions (data residency breach) | S1 | `AccessPolicyTests.Region_mismatch...`; black-box residency tests tagged `@R2`, including the cross-border referral case | Automated |
+| R3 | An error response leaks patient data | S1 | black-box 403 response test tagged `@R3` (empty body and no patient name) | Automated |
+| R4 | Unauthenticated or forged-token access | S1 | black-box auth tests tagged `@R4`, plus unauthenticated API endpoint tests | Automated |
 | R5 | Stored image altered or corrupted without detection | S1/S2 | `StoreIntegrityTests` | Automated |
-| R6 | Ingest duplicates, drops or accepts bad studies | S2 | `IngestTests`; black-box ingest tests (duplicate, bad modality, future date, bad base64, batch limits, no bad study blocks good ones) | Automated |
-| R7 | Allowed or denied access not audited, or audit visible to the wrong clinic | S2 | black-box audit tests; `IngestTests.Ingest_is_audited` | Automated |
+| R6 | Ingest duplicates, drops or accepts bad studies | S2 | `IngestTests`; black-box ingest tests tagged `@R6` (duplicate, bad modality, future date, bad base64, batch limits, no bad study blocks good ones) | Automated |
+| R7 | Allowed or denied access not audited, or audit visible to the wrong clinic | S2 | black-box audit tests tagged `@R7`; `IngestTests.Ingest_is_audited` | Automated |
 | R8 | 403 versus 404 reveals that a study id exists (enumeration) | S3 | Design discussion | **Open** |
 | R9 | Slow under many concurrent users | S2 | `tests/load/k6-studies.js` in the Staging stage | Automated, thresholds to tune |
 | R10 | Viewer renders wrong orientation or markers | S1 | Needs a real viewer and real DICOM samples | Not built |
 | R11 | Odd DICOM headers (missing tags, non-ASCII names) break ingest | S2 | Needs real DICOM parsing | Not built |
 | R12 | HL7 or FHIR order message malformed or missing referrer | S2 | Needs HL7 parsing | Not built |
 | R13 | Failed logins and unauthenticated requests are not audited | S3 | Not covered; product and security decision | **Open** |
-| R14 | Tests pointed at the wrong environment | S3 | Smoke test compares `GET /version` with the expected environment | Automated |
+| R14 | Tests pointed at the wrong environment | S3 | Smoke test tagged `@R14` compares `GET /version` with the expected environment | Automated |
 | R15 | Secret committed, or a default password used outside local | S2 | The API refuses to start without `Auth__QaPassword` outside Development; tests refuse to run without `MED_QA_PASSWORD` outside local. Add secret scanning to the repo | Partly automated |
-| R16 | Unsafe client-supplied header reflected (header or log injection) | S3 | Contract tests for `X-Correlation-ID` | Automated |
+| R16 | Unsafe client-supplied header reflected (header or log injection) | S3 | Contract test tagged `@R16` verifies unsafe `X-Correlation-ID` values are replaced | Automated |
 
 ## Broader risk areas of an imaging-sharing platform (modelled or not)
 

@@ -11,7 +11,7 @@ import { environment } from './helpers/env';
 test.describe('Permissions', () => {
   test.skip(!environment.allowMutations, 'Environment is read-only: these tests create data');
 
-  test("referrer sees the studies they referred, and not other referrers'", { tag: ['@smoke', '@regression', '@security'] }, async ({ request }) => {
+  test("referrer sees the studies they referred, and not other referrers'", { tag: ['@smoke', '@regression', '@security', '@R1'] }, async ({ request }) => {
     const mine = await createStudy(request, { referrerId: 'ref-001', patientId: 'P-1001' });
     const theirs = await createStudy(request, { referrerId: 'ref-002', patientId: 'P-1002' });
 
@@ -21,7 +21,7 @@ test.describe('Permissions', () => {
     expect(ids.has(theirs.id)).toBe(false);
   });
 
-  test('referrer can open their own study', { tag: ['@smoke', '@regression'] }, async ({ request }) => {
+  test('referrer can open their own study', { tag: ['@smoke', '@regression', '@R1'] }, async ({ request }) => {
     const study = await createStudy(request, { referrerId: 'ref-001', patientId: 'P-1001' });
     const lee = await login(request, 'dr.lee');
 
@@ -31,7 +31,7 @@ test.describe('Permissions', () => {
     expect((await res.json()).patientName).toBe(study.patientName);
   });
 
-  test('another referrer gets 403 with no patient data in the response', { tag: ['@smoke', '@regression', '@security'] }, async ({ request }) => {
+  test('another referrer gets 403 with no patient data in the response', { tag: ['@smoke', '@regression', '@security', '@R1', '@R3'] }, async ({ request }) => {
     const study = await createStudy(request, { referrerId: 'ref-001', patientId: 'P-1001' });
     const patel = await login(request, 'dr.patel');
 
@@ -44,7 +44,7 @@ test.describe('Permissions', () => {
     expect(body.trim(), 'A 403 should not explain itself in the body').toBe('');
   });
 
-  test("patient sees and opens their own study but not another patient's", { tag: ['@regression', '@security'] }, async ({ request }) => {
+  test("patient sees and opens their own study but not another patient's", { tag: ['@regression', '@security', '@R1'] }, async ({ request }) => {
     const study = await createStudy(request, { referrerId: 'ref-001', patientId: 'P-1001' });
     const sam = await login(request, 'sam');
     const chris = await login(request, 'chris');
@@ -67,7 +67,7 @@ test.describe('Permissions', () => {
     expect(res.status(), 'Expected a client error, not a 5xx').toBeLessThan(500);
   });
 
-  test('data residency: a European referrer and an ANZ referrer never see each other\'s studies', { tag: ['@regression', '@security'] }, async ({ request }) => {
+  test('data residency: a European referrer and an ANZ referrer never see each other\'s studies', { tag: ['@regression', '@security', '@R2'] }, async ({ request }) => {
     const anz = await createStudy(request, { referrerId: 'ref-001', patientId: 'P-1001' });
     const eu = await createStudy(request, { referrerId: 'ref-eu-1', patientId: 'P-2001', providerUser: 'clinic.eu', modality: 'CT', bodyPart: 'HEAD' });
     const novak = await login(request, 'dr.novak');
@@ -82,7 +82,7 @@ test.describe('Permissions', () => {
     expect((await request.get(`/studies/${eu.id}`, { headers: auth(lee) })).status()).toBe(403);
   });
 
-  test('data residency beats referrer of record: a European GP who referred to an ANZ clinic is still denied', { tag: ['@regression', '@security'] }, async ({ request }) => {
+  test('data residency beats referrer of record: a European GP who referred to an ANZ clinic is still denied', { tag: ['@regression', '@security', '@R2'] }, async ({ request }) => {
     // A cross-border referral. Role rules alone would allow it (Dr Novak IS the referrer of record),
     // so only the region rule stops it. Without this test, deleting the region check goes unnoticed.
     const study = await createStudy(request, { referrerId: 'ref-eu-1', patientId: 'P-1001' }); // pushed by the ANZ clinic
@@ -92,7 +92,7 @@ test.describe('Permissions', () => {
     expect((await request.get(`/studies/${study.id}`, { headers: auth(novak) })).status()).toBe(403);
   });
 
-  test("a provider can open its own clinic's study but another clinic cannot", { tag: ['@regression', '@security'] }, async ({ request }) => {
+  test("a provider can open its own clinic's study but another clinic cannot", { tag: ['@regression', '@security', '@R1'] }, async ({ request }) => {
     const study = await createStudy(request, { referrerId: 'ref-001', patientId: 'P-1001' });
     const owner = await login(request, 'clinic.admin');
     const other = await login(request, 'clinic.eu');

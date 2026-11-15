@@ -13,7 +13,7 @@ test.describe('Health and environment', () => {
     expect(res.status()).toBe(200);
   });
 
-  test('version reports the environment these tests expect', { tag: ['@smoke', '@regression'] }, async ({ request }) => {
+  test('version reports the environment these tests expect', { tag: ['@smoke', '@regression', '@R14'] }, async ({ request }) => {
     const res = await request.get('/version');
     expect(res.status()).toBe(200);
     const body = await res.json();

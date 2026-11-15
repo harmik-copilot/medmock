@@ -55,12 +55,13 @@ Local users all share the password `test-pass` (Development only): `dr.lee`, `dr
 | Black-box API, TypeScript (`tests/playwright-ts`) | 44 | yes |
 | Load (`tests/load`, k6) | 1 scenario | yes |
 
-The black-box tests are tagged **Smoke** (fast must-never-break checks), **Regression** (everything) and **Security**:
+The black-box tests are tagged **Smoke** (fast must-never-break checks), **Regression** (everything), **Security**, and by risk-register ID (`@R1`, `@R2`, etc.):
 
 ```bash
 dotnet test tests/Med.ApiTests --filter "Category=Smoke"
 bash scripts/run-api-tests.sh "Category=Security"
 npx playwright test --grep @smoke          # inside tests/playwright-ts
+npx playwright test --grep @R2             # tests mapped to risk R2 in docs/test-plan.md
 ```
 
 ## Environments
