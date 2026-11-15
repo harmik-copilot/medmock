@@ -6,7 +6,7 @@ import { qaPassword } from './helpers/env';
 test.describe('Auth', () => {
   test('valid login returns 200 and a token', { tag: ['@smoke', '@regression'] }, async ({ request }) => {
     const res = await request.post('/auth/login', {
-      data: { username: 'dr.lee', password: wrongPassword() },
+      data: { username: 'dr.lee', password: qaPassword() },
     });
 
     expect(res.status()).toBe(200);
